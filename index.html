@@ -46,6 +46,7 @@
     <div class="tab-header home-subtabs">
       <button type="button" class="tab-btn active" data-homeview="totes">Totes</button>
       <button type="button" class="tab-btn" data-homeview="items">Items</button>
+      <button type="button" class="tab-btn" data-homeview="locations">Locations</button>
     </div>
 
     <div id="totes-subview">
@@ -62,6 +63,14 @@
         <p>No items logged yet. Add one from the + button or from inside a tote.</p>
       </div>
       <div id="all-items-list" class="item-list"></div>
+    </div>
+
+    <div id="locations-subview" hidden>
+      <div id="locations-empty-state" class="empty-state" hidden>
+        <div class="empty-tag">EMPTY</div>
+        <p>No locations yet. Add one from the + button under the Location tab.</p>
+      </div>
+      <div id="locations-list" class="item-list"></div>
     </div>
   </main>
 
