@@ -398,7 +398,7 @@ button, input, textarea {
 }
 .field-label:first-of-type { margin-top: 0; }
 
-input[type="text"], input:not([type]), input[type="search"], textarea, #tote-form input, #item-form input {
+input[type="text"], input:not([type]), input[type="search"], textarea, select, #tote-form input, #item-form input, #location-form input {
   width: 100%;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -461,6 +461,64 @@ input:focus, textarea:focus { outline: none; border-color: var(--accent); }
   color: var(--danger);
   font-size: 13px;
   cursor: pointer;
+}
+
+select {
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239A9284' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 18px;
+  padding-right: 34px;
+}
+
+.location-select-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.location-select-row select { flex: 1; }
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  padding: 8px 2px;
+}
+
+/* ===== Tabs ===== */
+.tab-header {
+  display: flex;
+  gap: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 3px;
+  margin-bottom: 18px;
+}
+.tab-btn {
+  flex: 1;
+  background: none;
+  border: none;
+  border-radius: 8px;
+  padding: 9px 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.tab-btn.active {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.tab-panel { animation: none; }
+
+.home-subtabs {
+  margin-bottom: 16px;
 }
 
 /* ===== Backup modal ===== */
