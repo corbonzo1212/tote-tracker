@@ -52,12 +52,17 @@ button, input, textarea {
   border-bottom: 1px solid var(--border);
 }
 
+.wordmark-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
 .wordmark {
   font-family: var(--font-display);
   font-weight: 600;
   font-size: 15px;
   letter-spacing: 0.14em;
-  margin-bottom: 12px;
 }
 .wordmark-tag { color: var(--accent); }
 .wordmark-rest { color: var(--text-muted); margin-left: 6px; }
@@ -457,6 +462,35 @@ input:focus, textarea:focus { outline: none; border-color: var(--accent); }
   font-size: 13px;
   cursor: pointer;
 }
+
+/* ===== Backup modal ===== */
+.backup-section {
+  margin-bottom: 20px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+.backup-section:last-of-type { border-bottom: none; margin-bottom: 4px; padding-bottom: 0; }
+.backup-section h3 {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 0 0 6px;
+}
+.backup-hint {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0 0 12px;
+  line-height: 1.4;
+}
+.backup-import-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.btn-ghost.danger-text { color: var(--danger); border-color: rgba(232,99,10,0.35); }
 
 /* ===== QR panel ===== */
 .qr-panel {
