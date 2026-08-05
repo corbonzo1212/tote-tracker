@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="theme-color" content="#1C1B19">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Totes">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="manifest" href="manifest.json">
+<title>Tote Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ===== Header + Search ===== -->
+  <header class="topbar">
+    <div class="wordmark">
+      <span class="wordmark-tag">TOTE</span><span class="wordmark-rest">TRACKER</span>
+    </div>
+    <div class="search-wrap">
+      <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      <input id="search-input" type="search" placeholder="Search anything you own…" autocomplete="off" inputmode="search">
+      <button id="search-clear" class="search-clear" hidden aria-label="Clear search">&times;</button>
+    </div>
+  </header>
+
+  <!-- ===== Search Results ===== -->
+  <section id="search-results" class="search-results" hidden></section>
+
+  <!-- ===== Home: tote grid ===== -->
+  <main id="home-view">
+    <div id="empty-state" class="empty-state" hidden>
+      <div class="empty-tag">EMPTY</div>
+      <p>No totes yet. Log your first box to start tracking what's inside.</p>
+    </div>
+    <div id="tote-grid" class="tote-grid"></div>
+  </main>
+
+  <!-- ===== Tote detail view ===== -->
+  <main id="tote-view" class="tote-view" hidden>
+    <button id="back-btn" class="back-btn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg>
+      All totes
+    </button>
+
+    <div class="tote-header">
+      <div id="tote-photo-wrap" class="tote-photo-wrap" hidden>
+        <img id="tote-photo" alt="Tote photo">
+      </div>
+      <div class="tote-header-text">
+        <div id="tote-detail-label" class="tote-detail-label"></div>
+        <div id="tote-detail-location" class="tote-detail-location"></div>
+        <div id="tote-detail-notes" class="tote-detail-notes"></div>
+      </div>
+      <div class="tote-header-actions">
+        <button id="edit-tote-btn" class="icon-btn" aria-label="Edit tote">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+        </button>
+        <button id="qr-tote-btn" class="icon-btn" aria-label="Show QR code">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3zM20 14v.01M17 20v.01M20 17v3"/></svg>
+        </button>
+        <button id="delete-tote-btn" class="icon-btn danger" aria-label="Delete tote">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="items-header">
+      <span id="item-count-label"></span>
+      <button id="add-item-btn" class="btn-primary small">+ Item</button>
+    </div>
+    <div id="item-list" class="item-list"></div>
+  </main>
+
+  <button id="fab-new-tote" class="fab" aria-label="New tote">+</button>
+</div>
+
+<!-- ===== Tote form modal ===== -->
+<div id="tote-modal" class="modal-backdrop" hidden>
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="tote-modal-title">New Tote</h2>
+      <button class="modal-close" data-close="tote-modal" aria-label="Close">&times;</button>
+    </div>
+    <form id="tote-form">
+      <label class="field-label" for="tote-label-input">Label *</label>
+      <input id="tote-label-input" required placeholder="e.g. Tote 04 — Winter Decor" maxlength="80">
+
+      <label class="field-label" for="tote-location-input">Location</label>
+      <input id="tote-location-input" placeholder="e.g. Garage shelf, top-left">
+
+      <label class="field-label" for="tote-notes-input">Notes</label>
+      <textarea id="tote-notes-input" rows="2" placeholder="Optional notes"></textarea>
+
+      <label class="field-label">Photo (optional)</label>
+      <div id="tote-photo-picker" class="photo-picker"></div>
+
+      <div class="modal-actions">
+        <button type="button" class="btn-ghost" data-close="tote-modal">Cancel</button>
+        <button type="submit" class="btn-primary">Save tote</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ===== Item form modal ===== -->
+<div id="item-modal" class="modal-backdrop" hidden>
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="item-modal-title">New Item</h2>
+      <button class="modal-close" data-close="item-modal" aria-label="Close">&times;</button>
+    </div>
+    <form id="item-form">
+      <label class="field-label" for="item-name-input">Item name *</label>
+      <input id="item-name-input" required placeholder="e.g. String lights" maxlength="80">
+
+      <label class="field-label" for="item-desc-input">Description</label>
+      <textarea id="item-desc-input" rows="2" placeholder="Details that'll help you find it later"></textarea>
+
+      <label class="field-label" for="item-tags-input">Tags</label>
+      <input id="item-tags-input" placeholder="comma, separated, tags">
+
+      <label class="field-label">Photo (optional)</label>
+      <div id="item-photo-picker" class="photo-picker"></div>
+
+      <div class="modal-actions">
+        <button type="button" class="btn-ghost" data-close="item-modal">Cancel</button>
+        <button type="submit" class="btn-primary">Save item</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ===== QR modal ===== -->
+<div id="qr-modal" class="modal-backdrop" hidden>
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Tote QR Code</h2>
+      <button class="modal-close" data-close="qr-modal" aria-label="Close">&times;</button>
+    </div>
+    <div class="qr-panel">
+      <div id="qr-code-canvas" class="qr-code-canvas"></div>
+      <div id="qr-tote-label" class="qr-tote-label"></div>
+      <p class="qr-hint">Stick this on the tote. Scanning it with your iPhone's Camera app opens this tote here, ready to add an item.</p>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn-ghost" data-close="qr-modal">Close</button>
+      <button type="button" id="qr-print-btn" class="btn-primary">Print label</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/fuse.js/7.0.0/fuse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="js/db.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
