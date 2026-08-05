@@ -26,6 +26,7 @@ html, body {
   font-family: var(--font-body);
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior-y: none;
+  touch-action: manipulation;
 }
 
 body {
@@ -598,7 +599,7 @@ select {
   #qr-modal .modal-actions,
   #qr-modal .qr-hint { display: none; }
   .qr-code-canvas { background: #fff; }
-  .qr-tote-label { color: #000; }
+  .qr-tote-label { color: #000; font-size: 68px; }
 }
 
 @media (min-width: 640px) {
