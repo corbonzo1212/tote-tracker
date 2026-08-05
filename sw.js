@@ -1,6 +1,6 @@
 // Bump this version any time you change app.js/styles.css/index.html
 // so returning users get the new files instead of a stale cache.
-const CACHE_NAME = "tote-tracker-v5";
+const CACHE_NAME = "tote-tracker-v7";
 
 const APP_SHELL = [
   "./",
