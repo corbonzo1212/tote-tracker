@@ -489,6 +489,76 @@ function openQrModal() {
   openModal("qr-modal");
 }
 
+// ---------- Backup & restore ----------
+function exportData() {
+  const payload = {
+    app: "tote-tracker",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    totes,
+    items,
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const stamp = new Date().toISOString().slice(0, 10);
+  a.href = url;
+  a.download = `tote-tracker-backup-${stamp}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+function triggerImport(mode) {
+  const input = $("#import-file-input");
+  input.onchange = async (e) => {
+    const file = e.target.files[0];
+    input.value = ""; // allow re-selecting the same file later
+    if (!file) return;
+
+    let parsed;
+    try {
+      const text = await file.text();
+      parsed = JSON.parse(text);
+    } catch (err) {
+      alert("That file doesn't look like a valid backup (couldn't be read as JSON).");
+      return;
+    }
+
+    if (!parsed || !Array.isArray(parsed.totes) || !Array.isArray(parsed.items)) {
+      alert("That file doesn't look like a Tote Tracker backup.");
+      return;
+    }
+
+    const label = mode === "replace" ? "Replace ALL current data" : "Merge into current data";
+    const detail = mode === "replace"
+      ? `This will permanently delete everything currently in the app and load ${parsed.totes.length} tote(s) and ${parsed.items.length} item(s) from the backup. This can't be undone.`
+      : `This will add ${parsed.totes.length} tote(s) and ${parsed.items.length} item(s) from the backup to what's already here. If the backup came from this same app, matching totes/items will be overwritten rather than duplicated.`;
+
+    if (!confirm(`${label}?\n\n${detail}`)) return;
+
+    if (mode === "replace") {
+      await DB.clearAll();
+    }
+
+    for (const tote of parsed.totes) {
+      await DB.saveTote(tote);
+    }
+    for (const item of parsed.items) {
+      await DB.saveItem(item);
+    }
+
+    await refreshData();
+    closeModal("backup-modal");
+    currentToteId = null;
+    showView("home");
+    renderHome();
+    alert("Backup restored.");
+  };
+  input.click();
+}
+
 // ---------- Modal helpers ----------
 function openModal(id) { $(`#${id}`).hidden = false; }
 function closeModal(id) { $(`#${id}`).hidden = true; }
@@ -526,6 +596,11 @@ function bindEvents() {
   $("#qr-print-btn").addEventListener("click", () => window.print());
   $("#delete-tote-btn").addEventListener("click", handleDeleteTote);
   $("#add-item-btn").addEventListener("click", () => openItemModal(null));
+
+  $("#backup-btn").addEventListener("click", () => openModal("backup-modal"));
+  $("#export-btn").addEventListener("click", exportData);
+  $("#import-merge-btn").addEventListener("click", () => triggerImport("merge"));
+  $("#import-replace-btn").addEventListener("click", () => triggerImport("replace"));
 
   $("#tote-form").addEventListener("submit", handleToteSubmit);
   $("#item-form").addEventListener("submit", handleItemSubmit);
