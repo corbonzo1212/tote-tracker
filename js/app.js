@@ -9,6 +9,7 @@ let currentToteId = null;
 let activeView = "home"; // "home" | "tote"
 let editingToteId = null;
 let editingItemId = null;
+let editingLocationId = null;
 let pendingTotePhoto = null; // dataURL or null/undefined(unchanged)
 let pendingItemPhoto = null;
 let pendingLocationPhoto = null;
@@ -120,6 +121,7 @@ function buildSearchIndexes() {
 function renderHome() {
   renderTotesGrid();
   renderItemsListView();
+  renderLocationsListView();
 }
 
 function setHomeSubView(view) {
@@ -129,6 +131,7 @@ function setHomeSubView(view) {
   });
   $("#totes-subview").hidden = view !== "totes";
   $("#items-subview").hidden = view !== "items";
+  $("#locations-subview").hidden = view !== "locations";
 }
 
 function renderTotesGrid() {
@@ -162,6 +165,49 @@ function renderTotesGrid() {
     card.addEventListener("click", () => openTote(tote.id));
     grid.appendChild(card);
   });
+}
+
+function renderLocationsListView() {
+  const list = $("#locations-list");
+  const empty = $("#locations-empty-state");
+  list.innerHTML = "";
+
+  if (locations.length === 0) {
+    empty.hidden = false;
+    return;
+  }
+  empty.hidden = true;
+
+  locations.forEach((loc) => {
+    const toteCount = totes.filter((t) => t.locationId === loc.id).length;
+    const row = document.createElement("div");
+    row.className = "item-row";
+    row.innerHTML = `
+      ${loc.photo
+        ? `<img class="item-photo" src="${loc.photo}" alt="">`
+        : `<div class="item-photo"></div>`}
+      <div class="item-body">
+        <div class="item-name">${escapeHtml(loc.name)}</div>
+        <div class="item-desc">${toteCount} tote${toteCount === 1 ? "" : "s"}${loc.description ? " · " + escapeHtml(loc.description) : ""}</div>
+      </div>
+      <div class="item-actions">
+        <button class="icon-btn edit-location" data-id="${loc.id}" aria-label="Edit location">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+        </button>
+        <button class="icon-btn danger delete-location" data-id="${loc.id}" aria-label="Delete location">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+        </button>
+      </div>
+    `;
+    list.appendChild(row);
+  });
+
+  list.querySelectorAll(".edit-location").forEach((btn) =>
+    btn.addEventListener("click", (e) => openLocationEditModal(e.currentTarget.dataset.id))
+  );
+  list.querySelectorAll(".delete-location").forEach((btn) =>
+    btn.addEventListener("click", (e) => handleDeleteLocation(e.currentTarget.dataset.id))
+  );
 }
 
 function renderItemsListView() {
@@ -381,7 +427,7 @@ function setModalTab(tab) {
   $("#tote-modal-title").textContent =
     tab === "tote" ? (editingToteId ? "Edit Tote" : "New Tote") :
     tab === "item" ? "New Item" :
-    "New Location";
+    (editingLocationId ? "Edit Location" : "New Location");
 }
 
 function populateLocationDropdown(selectedId) {
@@ -443,6 +489,7 @@ async function handleToteSubmit(e) {
 
 // ---------- Location form (lives inside the same modal, "Location" tab) ----------
 function resetLocationForm() {
+  editingLocationId = null;
   pendingLocationPhoto = undefined;
   $("#location-name-input").value = "";
   $("#location-desc-input").value = "";
@@ -451,27 +498,68 @@ function resetLocationForm() {
   });
 }
 
+// Opens the modal straight to the Location tab, pre-filled, for editing an
+// existing location (reached from the home page Locations list).
+function openLocationEditModal(id) {
+  const loc = locations.find((l) => l.id === id);
+  if (!loc) return;
+
+  editingLocationId = id;
+  pendingLocationPhoto = undefined;
+  $("#location-name-input").value = loc.name;
+  $("#location-desc-input").value = loc.description || "";
+  renderPhotoPicker($("#location-photo-picker"), loc.photo, (dataUrl) => {
+    pendingLocationPhoto = dataUrl;
+  });
+
+  setModalTab("location");
+  openModal("tote-modal");
+  setTimeout(() => $("#location-name-input").focus(), 50);
+}
+
 async function handleLocationSubmit(e) {
   e.preventDefault();
   const name = $("#location-name-input").value.trim();
   if (!name) return;
 
-  const newLocation = {
-    id: DB.uid(),
+  const existing = editingLocationId ? locations.find((l) => l.id === editingLocationId) : null;
+  const wasEditingStandalone = !!editingLocationId;
+
+  const savedLocation = {
+    id: editingLocationId || DB.uid(),
     name,
     description: $("#location-desc-input").value.trim(),
-    photo: pendingLocationPhoto || null,
-    createdAt: Date.now(),
+    photo: pendingLocationPhoto !== undefined ? pendingLocationPhoto : (existing ? existing.photo : null),
+    createdAt: existing ? existing.createdAt : Date.now(),
   };
 
-  await DB.saveLocation(newLocation);
+  await DB.saveLocation(savedLocation);
   await refreshData();
 
-  // Jump back to the Tote tab with the new location pre-selected, so
-  // creating a location mid-tote-setup doesn't lose your place.
-  populateLocationDropdown(newLocation.id);
-  resetLocationForm();
-  setModalTab("tote");
+  if (wasEditingStandalone) {
+    // Edited from the home Locations list — just close and refresh it.
+    closeModal("tote-modal");
+    renderHome();
+  } else {
+    // Created mid-tote-setup — jump back to the Tote tab with it selected.
+    populateLocationDropdown(savedLocation.id);
+    resetLocationForm();
+    setModalTab("tote");
+  }
+}
+
+async function handleDeleteLocation(id) {
+  const loc = locations.find((l) => l.id === id);
+  if (!loc) return;
+  const toteCount = totes.filter((t) => t.locationId === id).length;
+  const msg = toteCount > 0
+    ? `Delete "${loc.name}"? ${toteCount} tote${toteCount === 1 ? "" : "s"} using it will be marked as having no location.`
+    : `Delete "${loc.name}"?`;
+  if (!confirm(msg)) return;
+
+  await DB.deleteLocation(id);
+  await refreshData();
+  renderHome();
 }
 
 async function handleDeleteTote() {
