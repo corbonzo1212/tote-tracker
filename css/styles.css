@@ -368,6 +368,13 @@ button, input, textarea {
   overflow-y: auto;
   padding: 20px 20px calc(20px + var(--safe-bottom));
 }
+
+/* The tabbed add/edit modal (Tote/Item/Location) gets a fixed minimum
+   height so the header and tabs don't jump around as you switch between
+   tabs with differently-sized forms. */
+#tote-modal .modal {
+  min-height: min(640px, 78vh);
+}
 .modal-header {
   display: flex;
   justify-content: space-between;
