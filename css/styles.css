@@ -351,6 +351,9 @@ button, input, textarea {
   align-items: flex-end;
   z-index: 50;
 }
+.modal-backdrop[hidden] {
+  display: none;
+}
 .modal {
   background: var(--bg);
   border-top: 1px solid var(--border);
