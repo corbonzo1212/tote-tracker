@@ -2,6 +2,7 @@
 
 let totes = [];
 let items = [];
+let locations = [];
 let fuseItems = null;
 let fuseTotes = null;
 let currentToteId = null;
@@ -10,6 +11,9 @@ let editingToteId = null;
 let editingItemId = null;
 let pendingTotePhoto = null; // dataURL or null/undefined(unchanged)
 let pendingItemPhoto = null;
+let pendingLocationPhoto = null;
+let pendingQuickItemPhoto = null;
+let homeSubView = "totes"; // "totes" | "items"
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -62,7 +66,18 @@ function handleDeepLink() {
 async function refreshData() {
   totes = await DB.getAllTotes();
   items = await DB.getAllItems();
+  locations = await DB.getAllLocations();
   buildSearchIndexes();
+}
+
+// Resolves a tote's location to a display name. Falls back to the old
+// free-text `location` string for totes created before locations existed.
+function resolveLocationName(tote) {
+  if (tote.locationId) {
+    const loc = locations.find((l) => l.id === tote.locationId);
+    if (loc) return loc.name;
+  }
+  return tote.location || "";
 }
 
 function buildSearchIndexes() {
@@ -84,13 +99,18 @@ function buildSearchIndexes() {
     ],
   });
 
-  fuseTotes = new Fuse(totes, {
+  const totesWithLocationName = totes.map((t) => ({
+    ...t,
+    locationName: resolveLocationName(t),
+  }));
+
+  fuseTotes = new Fuse(totesWithLocationName, {
     includeScore: true,
     threshold: 0.38,
     ignoreLocation: true,
     keys: [
       { name: "label", weight: 0.6 },
-      { name: "location", weight: 0.25 },
+      { name: "locationName", weight: 0.25 },
       { name: "notes", weight: 0.15 },
     ],
   });
@@ -98,6 +118,20 @@ function buildSearchIndexes() {
 
 // ---------- Rendering: Home ----------
 function renderHome() {
+  renderTotesGrid();
+  renderItemsListView();
+}
+
+function setHomeSubView(view) {
+  homeSubView = view;
+  document.querySelectorAll(".home-subtabs .tab-btn").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.homeview === view);
+  });
+  $("#totes-subview").hidden = view !== "totes";
+  $("#items-subview").hidden = view !== "items";
+}
+
+function renderTotesGrid() {
   const grid = $("#tote-grid");
   const empty = $("#empty-state");
   grid.innerHTML = "";
@@ -110,6 +144,7 @@ function renderHome() {
 
   totes.forEach((tote) => {
     const count = items.filter((it) => it.toteId === tote.id).length;
+    const locationName = resolveLocationName(tote);
     const card = document.createElement("div");
     card.className = "tote-card";
     card.innerHTML = `
@@ -120,12 +155,39 @@ function renderHome() {
         <div class="tote-card-label">${escapeHtml(tote.label)}</div>
         <div class="tote-card-meta">
           <span class="tote-card-count">${count} item${count === 1 ? "" : "s"}</span>
-          ${tote.location ? `<span>${escapeHtml(tote.location)}</span>` : ""}
+          ${locationName ? `<span>${escapeHtml(locationName)}</span>` : ""}
         </div>
       </div>
     `;
     card.addEventListener("click", () => openTote(tote.id));
     grid.appendChild(card);
+  });
+}
+
+function renderItemsListView() {
+  const list = $("#all-items-list");
+  const empty = $("#items-empty-state");
+  list.innerHTML = "";
+
+  if (items.length === 0) {
+    empty.hidden = false;
+    return;
+  }
+  empty.hidden = true;
+
+  const toteById = Object.fromEntries(totes.map((t) => [t.id, t]));
+  const sorted = [...items].sort((a, b) => a.name.localeCompare(b.name));
+
+  sorted.forEach((item) => {
+    const tote = toteById[item.toteId];
+    const toteLabel = tote ? tote.label : "Unknown tote";
+    const locationName = tote ? resolveLocationName(tote) : "";
+    const sub = locationName ? `${toteLabel} · ${locationName}` : toteLabel;
+
+    const row = makeResultRow(item.name, sub, item.photo, () => {
+      if (tote) openTote(tote.id);
+    });
+    list.appendChild(row);
   });
 }
 
@@ -141,8 +203,9 @@ function renderToteDetail() {
   if (!tote) { showView("home"); return; }
 
   $("#tote-detail-label").textContent = tote.label;
-  $("#tote-detail-location").textContent = tote.location || "";
-  $("#tote-detail-location").hidden = !tote.location;
+  const locationName = resolveLocationName(tote);
+  $("#tote-detail-location").textContent = locationName;
+  $("#tote-detail-location").hidden = !locationName;
   $("#tote-detail-notes").textContent = tote.notes || "";
   $("#tote-detail-notes").hidden = !tote.notes;
 
@@ -246,8 +309,9 @@ function runSearch(query) {
     resultsEl.appendChild(label);
     toteMatches.forEach(({ item: tote }) => {
       const count = items.filter((it) => it.toteId === tote.id).length;
+      const locationName = resolveLocationName(tote);
       resultsEl.appendChild(
-        makeResultRow(tote.label, `${count} item${count === 1 ? "" : "s"}${tote.location ? " · " + tote.location : ""}`, tote.photo, () => {
+        makeResultRow(tote.label, `${count} item${count === 1 ? "" : "s"}${locationName ? " · " + locationName : ""}`, tote.photo, () => {
           openTote(tote.id);
         })
       );
@@ -283,23 +347,70 @@ function makeResultRow(title, sub, photo, onClick) {
   return row;
 }
 
-// ---------- Tote modal ----------
-function openToteModal(id) {
-  editingToteId = id || null;
-  pendingTotePhoto = undefined;
-  const tote = id ? totes.find((t) => t.id === id) : null;
+// ---------- Tote / Location modal (tabbed) ----------
+let activeModalTab = "tote";
 
-  $("#tote-modal-title").textContent = id ? "Edit Tote" : "New Tote";
+function openAddModal(toteIdToEdit) {
+  editingToteId = toteIdToEdit || null;
+  pendingTotePhoto = undefined;
+  const tote = editingToteId ? totes.find((t) => t.id === editingToteId) : null;
+
   $("#tote-label-input").value = tote ? tote.label : "";
-  $("#tote-location-input").value = tote ? tote.location || "" : "";
   $("#tote-notes-input").value = tote ? tote.notes || "" : "";
+  populateLocationDropdown(tote ? tote.locationId || "" : "");
 
   renderPhotoPicker($("#tote-photo-picker"), tote ? tote.photo : null, (dataUrl) => {
     pendingTotePhoto = dataUrl;
   });
 
+  resetLocationForm();
+  resetQuickItemForm();
+  setModalTab("tote");
   openModal("tote-modal");
   setTimeout(() => $("#tote-label-input").focus(), 50);
+}
+
+function setModalTab(tab) {
+  activeModalTab = tab;
+  document.querySelectorAll("#tote-modal .tab-btn").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.tab === tab);
+  });
+  $("#tote-tab-panel").hidden = tab !== "tote";
+  $("#item-tab-panel").hidden = tab !== "item";
+  $("#location-tab-panel").hidden = tab !== "location";
+  $("#tote-modal-title").textContent =
+    tab === "tote" ? (editingToteId ? "Edit Tote" : "New Tote") :
+    tab === "item" ? "New Item" :
+    "New Location";
+}
+
+function populateLocationDropdown(selectedId) {
+  const select = $("#tote-location-select");
+  select.innerHTML = `<option value="">No location set</option>`;
+  locations.forEach((loc) => {
+    const opt = document.createElement("option");
+    opt.value = loc.id;
+    opt.textContent = loc.name;
+    select.appendChild(opt);
+  });
+  select.value = selectedId || "";
+}
+
+// Populates any <select> with all totes, alphabetically, for choosing/moving an item's tote.
+function populateToteDropdown(select, selectedId) {
+  select.innerHTML = "";
+  const sorted = [...totes].sort((a, b) => a.label.localeCompare(b.label));
+  if (sorted.length === 0) {
+    select.innerHTML = `<option value="">No totes yet</option>`;
+    return;
+  }
+  sorted.forEach((tote) => {
+    const opt = document.createElement("option");
+    opt.value = tote.id;
+    opt.textContent = tote.label;
+    select.appendChild(opt);
+  });
+  select.value = selectedId || sorted[0].id;
 }
 
 async function handleToteSubmit(e) {
@@ -308,11 +419,12 @@ async function handleToteSubmit(e) {
   if (!label) return;
 
   const existing = editingToteId ? totes.find((t) => t.id === editingToteId) : null;
+  const locationId = $("#tote-location-select").value || null;
 
   const tote = {
     id: editingToteId || DB.uid(),
     label,
-    location: $("#tote-location-input").value.trim(),
+    locationId,
     notes: $("#tote-notes-input").value.trim(),
     photo: pendingTotePhoto !== undefined ? pendingTotePhoto : (existing ? existing.photo : null),
     createdAt: existing ? existing.createdAt : Date.now(),
@@ -327,6 +439,39 @@ async function handleToteSubmit(e) {
   } else {
     renderHome();
   }
+}
+
+// ---------- Location form (lives inside the same modal, "Location" tab) ----------
+function resetLocationForm() {
+  pendingLocationPhoto = undefined;
+  $("#location-name-input").value = "";
+  $("#location-desc-input").value = "";
+  renderPhotoPicker($("#location-photo-picker"), null, (dataUrl) => {
+    pendingLocationPhoto = dataUrl;
+  });
+}
+
+async function handleLocationSubmit(e) {
+  e.preventDefault();
+  const name = $("#location-name-input").value.trim();
+  if (!name) return;
+
+  const newLocation = {
+    id: DB.uid(),
+    name,
+    description: $("#location-desc-input").value.trim(),
+    photo: pendingLocationPhoto || null,
+    createdAt: Date.now(),
+  };
+
+  await DB.saveLocation(newLocation);
+  await refreshData();
+
+  // Jump back to the Tote tab with the new location pre-selected, so
+  // creating a location mid-tote-setup doesn't lose your place.
+  populateLocationDropdown(newLocation.id);
+  resetLocationForm();
+  setModalTab("tote");
 }
 
 async function handleDeleteTote() {
@@ -345,6 +490,45 @@ async function handleDeleteTote() {
   renderHome();
 }
 
+// ---------- Quick item form (Item tab in the FAB modal) ----------
+function resetQuickItemForm() {
+  pendingQuickItemPhoto = undefined;
+  $("#quick-item-name-input").value = "";
+  $("#quick-item-desc-input").value = "";
+  $("#quick-item-tags-input").value = "";
+  populateToteDropdown($("#quick-item-tote-select"), currentToteId);
+  renderPhotoPicker($("#quick-item-photo-picker"), null, (dataUrl) => {
+    pendingQuickItemPhoto = dataUrl;
+  });
+}
+
+async function handleQuickItemSubmit(e) {
+  e.preventDefault();
+  const name = $("#quick-item-name-input").value.trim();
+  const toteId = $("#quick-item-tote-select").value;
+  if (!name || !toteId) return;
+
+  const tags = $("#quick-item-tags-input").value
+    .split(",")
+    .map((t) => t.trim())
+    .filter(Boolean);
+
+  const item = {
+    id: DB.uid(),
+    toteId,
+    name,
+    description: $("#quick-item-desc-input").value.trim(),
+    tags,
+    photo: pendingQuickItemPhoto || null,
+    createdAt: Date.now(),
+  };
+
+  await DB.saveItem(item);
+  await refreshData();
+  closeModal("tote-modal");
+  openTote(toteId);
+}
+
 // ---------- Item modal ----------
 function openItemModal(id) {
   editingItemId = id || null;
@@ -352,6 +536,7 @@ function openItemModal(id) {
   const item = id ? items.find((it) => it.id === id) : null;
 
   $("#item-modal-title").textContent = id ? "Edit Item" : "New Item";
+  populateToteDropdown($("#item-tote-select"), item ? item.toteId : currentToteId);
   $("#item-name-input").value = item ? item.name : "";
   $("#item-desc-input").value = item ? item.description || "" : "";
   $("#item-tags-input").value = item && item.tags ? item.tags.join(", ") : "";
@@ -367,7 +552,8 @@ function openItemModal(id) {
 async function handleItemSubmit(e) {
   e.preventDefault();
   const name = $("#item-name-input").value.trim();
-  if (!name || !currentToteId) return;
+  const toteId = $("#item-tote-select").value;
+  if (!name || !toteId) return;
 
   const existing = editingItemId ? items.find((it) => it.id === editingItemId) : null;
   const tags = $("#item-tags-input").value
@@ -377,7 +563,7 @@ async function handleItemSubmit(e) {
 
   const item = {
     id: editingItemId || DB.uid(),
-    toteId: currentToteId,
+    toteId,
     name,
     description: $("#item-desc-input").value.trim(),
     tags,
@@ -388,7 +574,14 @@ async function handleItemSubmit(e) {
   await DB.saveItem(item);
   await refreshData();
   closeModal("item-modal");
-  renderToteDetail();
+
+  // If the item moved to a different tote than the one we were viewing,
+  // follow it there so it's clear where it ended up.
+  if (toteId !== currentToteId) {
+    openTote(toteId);
+  } else {
+    renderToteDetail();
+  }
 }
 
 // ---------- Photo picker (shared by tote + item forms) ----------
@@ -493,10 +686,11 @@ function openQrModal() {
 function exportData() {
   const payload = {
     app: "tote-tracker",
-    version: 1,
+    version: 2,
     exportedAt: new Date().toISOString(),
     totes,
     items,
+    locations,
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
@@ -530,11 +724,12 @@ function triggerImport(mode) {
       alert("That file doesn't look like a Tote Tracker backup.");
       return;
     }
+    const parsedLocations = Array.isArray(parsed.locations) ? parsed.locations : [];
 
     const label = mode === "replace" ? "Replace ALL current data" : "Merge into current data";
     const detail = mode === "replace"
-      ? `This will permanently delete everything currently in the app and load ${parsed.totes.length} tote(s) and ${parsed.items.length} item(s) from the backup. This can't be undone.`
-      : `This will add ${parsed.totes.length} tote(s) and ${parsed.items.length} item(s) from the backup to what's already here. If the backup came from this same app, matching totes/items will be overwritten rather than duplicated.`;
+      ? `This will permanently delete everything currently in the app and load ${parsed.totes.length} tote(s), ${parsedLocations.length} location(s), and ${parsed.items.length} item(s) from the backup. This can't be undone.`
+      : `This will add ${parsed.totes.length} tote(s), ${parsedLocations.length} location(s), and ${parsed.items.length} item(s) from the backup to what's already here. If the backup came from this same app, matching records will be overwritten rather than duplicated.`;
 
     if (!confirm(`${label}?\n\n${detail}`)) return;
 
@@ -542,6 +737,9 @@ function triggerImport(mode) {
       await DB.clearAll();
     }
 
+    for (const loc of parsedLocations) {
+      await DB.saveLocation(loc);
+    }
     for (const tote of parsed.totes) {
       await DB.saveTote(tote);
     }
@@ -584,14 +782,14 @@ function bindEvents() {
     searchInput.blur();
   });
 
-  $("#fab-new-tote").addEventListener("click", () => openToteModal(null));
+  $("#fab-new-tote").addEventListener("click", () => openAddModal(null));
   $("#back-btn").addEventListener("click", () => {
     currentToteId = null;
     showView("home");
     renderHome();
   });
 
-  $("#edit-tote-btn").addEventListener("click", () => openToteModal(currentToteId));
+  $("#edit-tote-btn").addEventListener("click", () => openAddModal(currentToteId));
   $("#qr-tote-btn").addEventListener("click", openQrModal);
   $("#qr-print-btn").addEventListener("click", () => window.print());
   $("#delete-tote-btn").addEventListener("click", handleDeleteTote);
@@ -602,8 +800,19 @@ function bindEvents() {
   $("#import-merge-btn").addEventListener("click", () => triggerImport("merge"));
   $("#import-replace-btn").addEventListener("click", () => triggerImport("replace"));
 
+  document.querySelectorAll("#tote-modal .tab-btn").forEach((btn) => {
+    btn.addEventListener("click", () => setModalTab(btn.dataset.tab));
+  });
+  $("#new-location-shortcut").addEventListener("click", () => setModalTab("location"));
+
+  document.querySelectorAll(".home-subtabs .tab-btn").forEach((btn) => {
+    btn.addEventListener("click", () => setHomeSubView(btn.dataset.homeview));
+  });
+
   $("#tote-form").addEventListener("submit", handleToteSubmit);
   $("#item-form").addEventListener("submit", handleItemSubmit);
+  $("#location-form").addEventListener("submit", handleLocationSubmit);
+  $("#quick-item-form").addEventListener("submit", handleQuickItemSubmit);
 
   document.querySelectorAll("[data-close]").forEach((btn) => {
     btn.addEventListener("click", () => closeModal(btn.dataset.close));
