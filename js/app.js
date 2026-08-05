@@ -29,6 +29,8 @@ async function init() {
     navigator.serviceWorker.register("./sw.js").catch(() => {});
   }
 
+  preventDoubleTapZoom();
+
   await refreshData();
   bindEvents();
 
@@ -36,6 +38,25 @@ async function init() {
   if (!deepLinkHandled) {
     renderHome();
   }
+}
+
+// iOS Safari can still fire its double-tap-to-zoom gesture even with
+// zoom disabled in the viewport meta and touch-action: manipulation set —
+// this briefly shifts the viewport and throws off fixed-position elements
+// like the FAB. Blocking the second tap's default action stops it cold.
+function preventDoubleTapZoom() {
+  let lastTouchEnd = 0;
+  document.addEventListener(
+    "touchend",
+    (e) => {
+      const now = Date.now();
+      if (now - lastTouchEnd <= 350) {
+        e.preventDefault();
+      }
+      lastTouchEnd = now;
+    },
+    { passive: false }
+  );
 }
 
 // ---------- Deep linking (QR codes land here) ----------
