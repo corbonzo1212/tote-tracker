@@ -101,4 +101,12 @@ const DB = {
     const store = await tx("items", "readwrite");
     return reqToPromise(store.delete(id));
   },
+
+  // ---- Bulk (backup/restore) ----
+  async clearAll() {
+    const totesStore = await tx("totes", "readwrite");
+    await reqToPromise(totesStore.clear());
+    const itemsStore = await tx("items", "readwrite");
+    await reqToPromise(itemsStore.clear());
+  },
 };
